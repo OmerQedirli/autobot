@@ -1,0 +1,35 @@
+name: Veggie Family Bot 24/7
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install google-genai edge-tts google-api-python-client google-auth-oauthlib
+
+      - name: Create credentials from Secrets
+        run: |
+          mkdir -p ~/autobot
+          echo '${{ secrets.TOKEN_JSON }}' > ~/autobot/token.json
+          echo '${{ secrets.CLIENT_SECRET_JSON }}' > ~/autobot/client_secret.json
+
+      - name: Run main bot script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_KEY }}
+        run: |
+          python main_bot.py

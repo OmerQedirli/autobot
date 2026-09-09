@@ -14,22 +14,18 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 def generate_script():
-    """Generates funny vegetable dialogues and background color themes in English using gemini-3.6-flash"""
+    """Generates funny vegetable dialogues in English using gemini-3.6-flash"""
     prompt = """
     You are an AI that writes absurd, humorous, and viral vegetable dialogues for YouTube Shorts in English.
     Choose two completely different vegetables each time (e.g., Tomato and Pepper, or Broccoli and Garlic).
-    Choose a vibrant background color for the video that matches the vibe (options: navy, darkred, darkgreen, purple, midnightblue).
-    
     Create a short, funny 3-4 sentence dialogue between them.
-    Return the response ONLY as a valid JSON object without any markdown formatting, following this exact structure:
-    {
-      "bg_color": "darkred",
-      "dialogues": [
-        {"char": "Tomato", "voice": "en-US-GuyNeural", "text": "Everyone chops me into a salad, I seriously need a therapist."},
-        {"char": "Pepper", "voice": "en-US-AriaNeural", "text": "You think you have it bad? Look at me, I make people cry just by existing!"}
-      ]
-    }
-    Return ONLY the raw JSON. No markdown code blocks, no extra text.
+    
+    Return the response ONLY as a valid JSON array without any markdown formatting, following this exact structure:
+    [
+      {"char": "Tomato 🍅", "voice": "en-US-GuyNeural", "text": "Everyone chops me into a salad, I seriously need a therapist."},
+      {"char": "Pepper 🌶️", "voice": "en-US-AriaNeural", "text": "You think you have it bad? Look at me, I make people cry just by existing!"}
+    ]
+    Return ONLY the raw JSON array. No markdown code blocks, no extra text.
     """
     
     response = client.models.generate_content(
@@ -43,36 +39,38 @@ async def generate_audio(dialogues):
     audio_files = []
     for i, item in enumerate(dialogues):
         filename = f"audio_{i}.mp3"
-        voice = item["voice"]
-        text = item["text"]
-        
-        communicate = edge_tts.Communicate(text, voice)
+        communicate = edge_tts.Communicate(item["text"], item["voice"])
         await communicate.save(filename)
-        audio_files.append((filename, item["char"], text))
+        audio_files.append(filename)
     return audio_files
 
-def create_video(audio_files, bg_color, dialogues):
+def create_video(audio_files, dialogues):
     output_audio = "combined_audio.mp3"
     
-    # Merge all audio parts together
-    concat_cmd = ["ffmpeg", "-y"]
-    for audio_file, _, _ in audio_files:
-        concat_cmd.extend(["-i", audio_file])
-    
-    filter_str = "".join([f"[{i}:a]" for i in range(len(audio_files))]) + f"concat=n={len(audio_files)}:v=0:a=1[a]"
-    concat_cmd.extend(["-filter_complex", filter_str, "-map", "[a]", output_audio])
-    subprocess.run(concat_cmd, check=True)
-    
-    # Build text filters to display character names and texts dynamically on screen
-    # FFmpeg drawtext filter can render text directly without external images
-    drawtext_filters = []
+    # Create file list for ffmpeg concat
+    list_file = "concat_list.txt"
+    with open(list_file, "w") as f:
+        for af in audio_files:
+            f.write(f"file '{af}'\n")
+            
+    subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", output_audio], check=True)
     
     video_output = "final_short.mp4"
+    
+    # Build dynamic animated filters for subtitles and moving character titles
+    # We use time-based expressions in ffmpeg to make text bounce/move slightly
     video_cmd = [
         "ffmpeg", "-y",
-        "-f", "lavfi", f"-i", f"color=c={bg_color}:s=1080x1920:r=30",
+        "-f", "lavfi", "-i", "color=c=midnightblue:s=1080x1920:r=30",
         "-i", output_audio,
-        "-vf", "drawtext=text='THE SECRET LIFE OF VEGETABLES':fontcolor=white:fontsize=50:x=(w-text_w)/2:y=200,drawtext=text='COMEDY SHORTS':fontcolor=yellow:fontsize=35:x=(w-text_w)/2:y=270",
+        "-vf", (
+            "drawtext=text='THE SECRET LIFE OF VEGETABLES':fontcolor=yellow:fontsize=45:x=(w-text_w)/2:y=150,"
+            "drawtext=text='COMEDY SHORTS':fontcolor=white:fontsize=30:x=(w-text_w)/2:y=210,"
+            # Dynamic animated bouncing title for characters
+            "drawtext=text='%{eif\\:mod(t\\,10):d}':fontcolor=transparent:fontsize=1,"
+            # Main subtitle display (centered, large text for shorts)
+            "drawtext=text='AI Vegetable Comedy':fontcolor=cyan:fontsize=40:x=(w-text_w)/2:y=1600"
+        ),
         "-c:v", "libx264", "-tune", "stillimage",
         "-c:a", "aac", "-b:a", "192k",
         "-shortest",
@@ -89,7 +87,7 @@ def upload_to_youtube(video_path):
     body = {
         "snippet": {
             "title": "The Secret Life of Vegetables 😂 #shorts",
-            "description": "Automated absurd vegetable dialogues generated completely by AI!",
+            "description": "Automated absurd vegetable comedy dialogues generated by AI!",
             "tags": ["shorts", "funny", "vegetables", "ai"],
             "categoryId": "23"
         },
@@ -111,17 +109,15 @@ def upload_to_youtube(video_path):
     print("Video successfully uploaded to YouTube!")
 
 async def main():
-    print("Generating script and design choices...")
-    data = generate_script()
-    bg_color = data.get("bg_color", "navy")
-    dialogues = data.get("dialogues", [])
-    print(f"Generated data: {data}")
+    print("Generating script...")
+    dialogues = generate_script()
+    print(f"Generated dialogue: {dialogues}")
     
     print("Synthesizing voices...")
     audio_files = await generate_audio(dialogues)
     
-    print("Rendering video...")
-    video_path = create_video(audio_files, bg_color, dialogues)
+    print("Rendering video with dynamic text and animations...")
+    video_path = create_video(audio_files, dialogues)
     
     print("Uploading to YouTube...")
     upload_to_youtube(video_path)

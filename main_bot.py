@@ -1,12 +1,8 @@
-# ==========================================
-# 3. main_bot.py
-# ==========================================
 import os
 import random
 import asyncio
 import subprocess
 import json
-import base64
 import google.generativeai as genai
 import edge_tts
 from google.oauth2.credentials import Credentials
@@ -56,16 +52,6 @@ async def generate_audio(dialogues):
 
 def create_video(audio_files):
     """FFmpeg vasitəsilə səsləri birləşdirib 9:16 formatda Shorts videosu yaradır"""
-    # Sadəlik üçün audio fayllarını bir səsə birləşdiririk və rəngli fon üzərində video qururuq
-    input_args = []
-    filter_complex_parts = []
-    
-    for i, (audio_file, char, text) in enumerate(audio_files):
-        input_args.extend(["-i", audio_file])
-    
-    # Audio fayllarını birləşdirmək üçün filter
-    concat_filter = "".join([f"[{i}:a]" for i in range(len(audio_files))]) + f"concat=n={len(audio_files)}:v=0:a=1[outa]"
-    
     output_audio = "combined_audio.mp3"
     
     # Əvvəlcə səsləri birləşdiririk
@@ -93,18 +79,10 @@ def create_video(audio_files):
 
 def upload_to_youtube(video_path):
     """Yaradılan videonu YouTube kanalına avtomatik olaraq yükləyir"""
-    client_secret_json = os.environ.get("YOUTUBE_CLIENT_SECRET")
-    token_pickle = os.environ.get("YOUTUBE_TOKEN")
-    
-    with open("client_secret.json", "w") as f:
-        f.write(base64.b64decode(client_secret_json).decode('utf-8'))
-        
-    with open("token.json", "w") as f:
-        f.write(base64.b64decode(token_pickle).decode('utf-8'))
+    token_path = os.path.expanduser("~/autobot/token.json")
+    client_secret_path = os.path.expanduser("~/autobot/client_secret.json")
 
-    flow = InstalledAppFlow.from_client_secrets_file("client_secret.json", SCOPES)
-    creds = Credentials.from_authorized_user_file("token.json", SCOPES)
-    
+    creds = Credentials.from_authorized_user_file(token_path, SCOPES)
     youtube = build("youtube", "v3", credentials=creds)
 
     body = {

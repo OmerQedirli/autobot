@@ -3,24 +3,21 @@ import random
 import asyncio
 import subprocess
 import json
-import google.generativeai as genai
+from google import genai
 import edge_tts
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# API açarlarının yüklənməsi
+# Yeni google-genai klientinin yaradılması
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 def generate_script():
-    """Gemini vasitəsilə hər dəfə fərqli tərəvəz personajları və absurd dialoq yaradır"""
-    # Mövcud ən son və stabil model adından istifadə edirik
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    
+    """Yeni google-genai vasitəsilə tərəvəz dialoqları yaradır"""
     prompt = """
     Sən YouTube Shorts üçün absurd, yumoristik və viral tərəvəz dialoqları yazan süni intellektsən.
     Hər dəfə tamamilə fərqli iki tərəvəz seç (məsələn: Pomidor və Bibər, və ya Badımcan və Sarımsaq, və s.).
@@ -34,12 +31,14 @@ def generate_script():
     Yalnız yuxarıdakı kimi düzgün JSON massivi qaytar, başqa heç bir izahat və ya markdown işarəsi yazma.
     """
     
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(
+        model='gemini-2.5-flash',
+        contents=prompt,
+    )
     clean_text = response.text.replace("```json", "").replace("```", "").strip()
     return json.loads(clean_text)
 
 async def generate_audio(dialogues):
-    """Hər bir sətri uyğun səs ilə audio faylına çevirir"""
     audio_files = []
     for i, item in enumerate(dialogues):
         filename = f"audio_{i}.mp3"
@@ -52,7 +51,6 @@ async def generate_audio(dialogues):
     return audio_files
 
 def create_video(audio_files):
-    """FFmpeg vasitəsilə səsləri birləşdirib 9:16 formatda Shorts videosu yaradır"""
     output_audio = "combined_audio.mp3"
     
     concat_cmd = ["ffmpeg", "-y"]
@@ -77,7 +75,6 @@ def create_video(audio_files):
     return video_output
 
 def upload_to_youtube(video_path):
-    """Yaradılan videonu YouTube kanalına avtomatik olaraq yükləyir"""
     token_path = os.path.expanduser("~/autobot/token.json")
     client_secret_path = os.path.expanduser("~/autobot/client_secret.json")
 
@@ -89,7 +86,7 @@ def upload_to_youtube(video_path):
             "title": "Tərəvəzlərin Gizli Həyatı 😂 #shorts",
             "description": "Süni intellekt tərəfindən avtomatlaşdırılmış absurd tərəvəz dialoqları!",
             "tags": ["shorts", "funny", "vegetables", "ai"],
-            "categoryId": "23" # Comedy
+            "categoryId": "23"
         },
         "status": {
             "privacyStatus": "public",

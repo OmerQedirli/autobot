@@ -2,8 +2,8 @@ name: Veggie Family Bot 24/7
 
 on:
   schedule:
-    - cron: '0 4,11,16 * * *'  # Hər gün Bakı vaxtı ilə 08:00, 15:00 və 20:00-da işləyir (UTC ilə 04:00, 11:00, 16:00)
-  workflow_dispatch:      # Əllə istədiyin vaxt işə sala bilməyin üçün
+    - cron: '0 4,11,16 * * *'  # Hər gün Bakı vaxtı ilə 08:00, 15:00 və 20:00-da işləyir
+  workflow_dispatch:      
 
 jobs:
   run-bot:

@@ -18,7 +18,7 @@ SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 def generate_script():
     """Gemini vasitəsilə hər dəfə fərqli tərəvəz personajları və absurd dialoq yaradır"""
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-pro')
     
     prompt = """
     Sən YouTube Shorts üçün absurd, yumoristik və viral tərəvəz dialoqları yazan süni intellektsən.

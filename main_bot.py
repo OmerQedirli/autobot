@@ -1,118 +1,149 @@
+# ==========================================
+# 3. main_bot.py
+# ==========================================
 import os
 import random
 import asyncio
 import subprocess
+import json
+import base64
+import google.generativeai as genai
 import edge_tts
-from google import genai
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.oauth2.credentials import Credentials
 
-# API açarını environment-dən oxuyuruq
+# API açarlarının yüklənməsi
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-def generate_script():
-    client = genai.Client(api_key=GEMINI_API_KEY)
-    topics = [
-        "eating broccoli for dinner", 
-        "playing video games secretly", 
-        "waking up early for school", 
-        "stealing ice cream from the fridge",
-        "doing homework at the last minute",
-        "surviving math class without sleeping",
-        "trying to sneak out of the house"
-    ]
-    topic = random.choice(topics)
-    
-    prompt = f"Write a funny, 15-second monologue for a cute 3D Animated Tomato Kid in English about {topic}. Make it short, funny, and punchy. Return ONLY the spoken dialogue text."
-    
-    response = client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=prompt,
-    )
-    script_text = response.text.strip().replace('"', '')
-    return script_text, topic
-
-async def generate_audio(text, output_file):
-    communicate = edge_tts.Communicate(text, "en-US-AnaNeural")
-    await communicate.save(output_file)
-
-def create_video(audio_path, output_path, text):
-    clean_text = text.replace("'", "").replace(":", "")
-    
-    color_list = ['red', 'blue', 'green', 'purple', 'orange', 'pink', 'yellow', 'cyan', 'magenta']
-    c0 = random.choice(color_list)
-    c1 = random.choice(color_list)
-    
-    command = [
-        'ffmpeg', '-y',
-        '-f', 'lavfi', '-i', f'gradients=s=1080x1920:rate=30:c0={c0}:c1={c1}',
-        '-i', audio_path,
-        '-vf', f"drawtext=text='{clean_text}':fontcolor=white:fontsize=38:box=1:boxcolor=black@0.7:x=(w-text_w)/2:y=(h-text_h)/2-100:fix_bounds=true",
-        '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '192k',
-        '-pix_fmt', 'yuv420p', '-shortest', output_path
-    ]
-    subprocess.run(command, check=True)
+genai.configure(api_key=GEMINI_API_KEY)
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
-def upload_to_youtube(video_path, title):
-    base_dir = os.path.expanduser('~/autobot')
-    if not os.path.exists(base_dir):
-        os.makedirs(base_dir, exist_ok=True)
-        
-    token_path = os.path.join(base_dir, 'token.json')
-    secret_path = os.path.join(base_dir, 'client_secret.json')
+def generate_script():
+    """Gemini vasitəsilə hər dəfə fərqli tərəvəz personajları və absurd dialoq yaradır"""
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    prompt = """
+    Sən YouTube Shorts üçün absurd, yumoristik və viral tərəvəz dialoqları yazan süni intellektsən.
+    Hər dəfə tamamilə fərqli iki tərəvəz seç (məsələn: Pomidor və Bibər, və ya Badımcan və Sarımsaq, və s.).
+    Onlar arasında gündəlik həyatdan, soyuducudan və ya absurd fəlsəfədən bəhs edən qısa, 3-4 cümləlik gülməli dialoq qur.
+    
+    Cavabı qətiyyən əlavə sözlər yazmadan, yalnız aşağıdakı formatda JSON kimi və ya sətr-sətr qaytar:
+    [
+      {"char": "Pomidor", "voice": "az-AZ-BabakNeural", "text": "Hər kəs məni salata doğrayır, artıq psixoloqa getməliyəm."},
+      {"char": "Bibər", "voice": "az-AZ-BanuNeural", "text": "Sən hələ yaxşıdarsan, mənə baxanda adamların gözü yaşarır!"}
+    ]
+    Yalnız yuxarıdakı kimi düzgün JSON massivi qaytar, başqa heç bir izahat yazma.
+    """
+    
+    response = model.generate_content(prompt)
+    clean_text = response.text.replace("```json", "").replace("```", "").strip()
+    return json.loads(clean_text)
 
-    credentials = None
-    if os.path.exists(token_path):
-        credentials = Credentials.from_authorized_user_file(token_path, SCOPES)
+async def generate_audio(dialogues):
+    """Hər bir sətri uyğun səs ilə audio faylına çevirir"""
+    audio_files = []
+    for i, item in enumerate(dialogues):
+        filename = f"audio_{i}.mp3"
+        voice = item["voice"]
+        text = item["text"]
         
-    if not credentials or not credentials.valid:
-        flow = InstalledAppFlow.from_client_secrets_file(secret_path, SCOPES)
-        credentials = flow.run_local_server(port=0)
-        with open(token_path, 'w') as token:
-            token.write(credentials.to_json())
+        communicate = edge_tts.Communicate(text, voice)
+        await communicate.save(filename)
+        audio_files.append((filename, item["char"], text))
+    return audio_files
 
-    youtube = build('youtube', 'v3', credentials=credentials)
+def create_video(audio_files):
+    """FFmpeg vasitəsilə səsləri birləşdirib 9:16 formatda Shorts videosu yaradır"""
+    # Sadəlik üçün audio fayllarını bir səsə birləşdiririk və rəngli fon üzərində video qururuq
+    input_args = []
+    filter_complex_parts = []
+    
+    for i, (audio_file, char, text) in enumerate(audio_files):
+        input_args.extend(["-i", audio_file])
+    
+    # Audio fayllarını birləşdirmək üçün filter
+    concat_filter = "".join([f"[{i}:a]" for i in range(len(audio_files))]) + f"concat=n={len(audio_files)}:v=0:a=1[outa]"
+    
+    output_audio = "combined_audio.mp3"
+    
+    # Əvvəlcə səsləri birləşdiririk
+    concat_cmd = ["ffmpeg", "-y"]
+    for audio_file, _, _ in audio_files:
+        concat_cmd.extend(["-i", audio_file])
+    
+    filter_str = "".join([f"[{i}:a]" for i in range(len(audio_files))]) + f"concat=n={len(audio_files)}:v=0:a=1[a]"
+    concat_cmd.extend(["-filter_complex", filter_str, "-map", "[a]", output_audio])
+    subprocess.run(concat_cmd, check=True)
+    
+    # İndi 9:16 formatda rəngli fon və səs ilə təmiz Shorts videosu yaradırıq
+    video_output = "final_short.mp4"
+    video_cmd = [
+        "ffmpeg", "-y",
+        "-f", "lavfi", "-i", "color=c=navy:s=1080x1920:r=30",
+        "-i", output_audio,
+        "-c:v", "libx264", "-tune", "stillimage",
+        "-c:a", "aac", "-b:a", "192k",
+        "-shortest",
+        video_output
+    ]
+    subprocess.run(video_cmd, check=True)
+    return video_output
+
+def upload_to_youtube(video_path):
+    """Yaradılan videonu YouTube kanalına avtomatik olaraq yükləyir"""
+    client_secret_json = os.environ.get("YOUTUBE_CLIENT_SECRET")
+    token_pickle = os.environ.get("YOUTUBE_TOKEN")
+    
+    with open("client_secret.json", "w") as f:
+        f.write(base64.b64decode(client_secret_json).decode('utf-8'))
+        
+    with open("token.json", "w") as f:
+        f.write(base64.b64decode(token_pickle).decode('utf-8'))
+
+    flow = InstalledAppFlow.from_client_secrets_file("client_secret.json", SCOPES)
+    creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    
+    youtube = build("youtube", "v3", credentials=creds)
 
     body = {
-        'snippet': {
-            'title': f"{title} 🍅 #shorts #funny #animation #veggies",
-            'description': 'Daily Veggie Family Episode! Generated fully automatic by AI bot!',
-            'tags': ['shorts', 'veggie', 'funny', 'animation', 'kids'],
-            'categoryId': '23'
+        "snippet": {
+            "title": "Tərəvəzlərin Gizli Həyatı 😂 #shorts",
+            "description": "Süni intellekt tərəfindən avtomatlaşdırılmış absurd tərəvəz dialoqları!",
+            "tags": ["shorts", "funny", "vegetables", "ai"],
+            "categoryId": "23" # Comedy
         },
-        'status': {
-            'privacyStatus': 'public',
-            'selfDeclaredMadeForKids': False
+        "status": {
+            "privacyStatus": "public",
+            "selfDeclaredMadeForKids": False
         }
     }
 
     media = MediaFileUpload(video_path, chunksize=-1, resumable=True)
-    response = youtube.videos().insert(part=','.join(body.keys()), body=body, media_body=media).execute()
-    print(f"Uğurla Yükləndi! Video ID: {response['id']}")
+    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+    
+    response = None
+    while response is None:
+        status, response = request.next_chunk()
+        if status:
+            print(f"Yüklənmə faizi: {int(status.progress() * 100)}%")
+            
+    print("Video uğurla YouTube-a yükləndi!")
 
 async def main():
-    base_dir = os.path.expanduser('~/autobot')
-    if not os.path.exists(base_dir):
-        os.makedirs(base_dir, exist_ok=True)
-        
-    audio_file = os.path.join(base_dir, 'voice.mp3')
-    video_file = os.path.join(base_dir, 'final_short.mp4')
-
-    print("1. AI ssenari hazırlayır...")
-    script, topic = generate_script()
+    print("Ssenari yaradılır...")
+    dialogues = generate_script()
+    print(f"Yaranan dialoq: {dialogues}")
     
-    print("2. Audio səsləndirilir...")
-    await generate_audio(script, audio_file)
+    print("Səslər sintez olunur...")
+    audio_files = await generate_audio(dialogues)
     
-    print("3. FFmpeg təsadüfi rəngli hərəkətli fon yaradıb videonu montajlayır...")
-    create_video(audio_file, video_file, script)
+    print("Video montaj edilir...")
+    video_path = create_video(audio_files)
     
-    print("4. YouTube-a avtomatik yüklənir...")
-    upload_to_youtube(video_file, f"Veggie Family: {topic.title()}")
+    print("YouTube-a yüklənir...")
+    upload_to_youtube(video_path)
 
 if __name__ == "__main__":
     asyncio.run(main())

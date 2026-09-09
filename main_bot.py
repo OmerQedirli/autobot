@@ -17,7 +17,7 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 def generate_script():
-    """Yeni google-genai vasitəsilə tərəvəz dialoqları yaradır"""
+    """Yeni google-genai və gemini-3.6-flash vasitəsilə tərəvəz dialoqları yaradır"""
     prompt = """
     Sən YouTube Shorts üçün absurd, yumoristik və viral tərəvəz dialoqları yazan süni intellektsən.
     Hər dəfə tamamilə fərqli iki tərəvəz seç (məsələn: Pomidor və Bibər, və ya Badımcan və Sarımsaq, və s.).
@@ -31,9 +31,8 @@ def generate_script():
     Yalnız yuxarıdakı kimi düzgün JSON massivi qaytar, başqa heç bir izahat və ya markdown işarəsi yazma.
     """
     
-    # Model adı mövcud stabil versiya ilə dəyişdirildi
     response = client.models.generate_content(
-        model='gemini-1.5-flash',
+        model='gemini-3.6-flash',
         contents=prompt,
     )
     clean_text = response.text.replace("```json", "").replace("```", "").strip()

@@ -18,19 +18,20 @@ SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 def generate_script():
     """Gemini vasitəsilə hər dəfə fərqli tərəvəz personajları və absurd dialoq yaradır"""
-    model = genai.GenerativeModel('gemini-pro')
+    # Mövcud ən son və stabil model adından istifadə edirik
+    model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = """
     Sən YouTube Shorts üçün absurd, yumoristik və viral tərəvəz dialoqları yazan süni intellektsən.
     Hər dəfə tamamilə fərqli iki tərəvəz seç (məsələn: Pomidor və Bibər, və ya Badımcan və Sarımsaq, və s.).
     Onlar arasında gündəlik həyatdan, soyuducudan və ya absurd fəlsəfədən bəhs edən qısa, 3-4 cümləlik gülməli dialoq qur.
     
-    Cavabı qətiyyən əlavə sözlər yazmadan, yalnız aşağıdakı formatda JSON kimi və ya sətr-sətr qaytar:
+    Cavabı qətiyyən əlavə sözlər yazmadan, yalnız aşağıdakı formatda JSON kimi qaytar:
     [
       {"char": "Pomidor", "voice": "az-AZ-BabakNeural", "text": "Hər kəs məni salata doğrayır, artıq psixoloqa getməliyəm."},
       {"char": "Bibər", "voice": "az-AZ-BanuNeural", "text": "Sən hələ yaxşıdarsan, mənə baxanda adamların gözü yaşarır!"}
     ]
-    Yalnız yuxarıdakı kimi düzgün JSON massivi qaytar, başqa heç bir izahat yazma.
+    Yalnız yuxarıdakı kimi düzgün JSON massivi qaytar, başqa heç bir izahat və ya markdown işarəsi yazma.
     """
     
     response = model.generate_content(prompt)
@@ -54,7 +55,6 @@ def create_video(audio_files):
     """FFmpeg vasitəsilə səsləri birləşdirib 9:16 formatda Shorts videosu yaradır"""
     output_audio = "combined_audio.mp3"
     
-    # Əvvəlcə səsləri birləşdiririk
     concat_cmd = ["ffmpeg", "-y"]
     for audio_file, _, _ in audio_files:
         concat_cmd.extend(["-i", audio_file])
@@ -63,7 +63,6 @@ def create_video(audio_files):
     concat_cmd.extend(["-filter_complex", filter_str, "-map", "[a]", output_audio])
     subprocess.run(concat_cmd, check=True)
     
-    # İndi 9:16 formatda rəngli fon və səs ilə təmiz Shorts videosu yaradırıq
     video_output = "final_short.mp4"
     video_cmd = [
         "ffmpeg", "-y",

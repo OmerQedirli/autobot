@@ -31,8 +31,9 @@ def generate_script():
     Yalnız yuxarıdakı kimi düzgün JSON massivi qaytar, başqa heç bir izahat və ya markdown işarəsi yazma.
     """
     
+    # Model adı mövcud stabil versiya ilə dəyişdirildi
     response = client.models.generate_content(
-        model='gemini-2.5-flash',
+        model='gemini-1.5-flash',
         contents=prompt,
     )
     clean_text = response.text.replace("```json", "").replace("```", "").strip()

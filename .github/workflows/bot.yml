@@ -3,7 +3,7 @@ name: Veggie Family Bot 24/7
 on:
   schedule:
     - cron: '0 4,11,16 * * *'  # Hər gün Bakı vaxtı ilə 08:00, 15:00 və 20:00-da işləyir
-  workflow_dispatch:      
+  workflow_dispatch:      # Əllə istədiyin vaxt işə sala bilməyin üçün
 
 jobs:
   run-bot:
@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies and FFmpeg
         run: |
           python -m pip install --upgrade pip
-          pip install google-generativeai edge-tts google-api-python-client google-auth-oauthlib
+          pip install google-genai edge-tts google-api-python-client google-auth-oauthlib
           sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Create credentials from Secrets

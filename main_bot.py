@@ -57,8 +57,7 @@ def create_video(audio_files, dialogues):
     
     video_output = "final_short.mp4"
     
-    # Build dynamic animated filters for subtitles and moving character titles
-    # We use time-based expressions in ffmpeg to make text bounce/move slightly
+    # Clean and stable video filter for rendering text cleanly on background
     video_cmd = [
         "ffmpeg", "-y",
         "-f", "lavfi", "-i", "color=c=midnightblue:s=1080x1920:r=30",
@@ -66,9 +65,6 @@ def create_video(audio_files, dialogues):
         "-vf", (
             "drawtext=text='THE SECRET LIFE OF VEGETABLES':fontcolor=yellow:fontsize=45:x=(w-text_w)/2:y=150,"
             "drawtext=text='COMEDY SHORTS':fontcolor=white:fontsize=30:x=(w-text_w)/2:y=210,"
-            # Dynamic animated bouncing title for characters
-            "drawtext=text='%{eif\\:mod(t\\,10):d}':fontcolor=transparent:fontsize=1,"
-            # Main subtitle display (centered, large text for shorts)
             "drawtext=text='AI Vegetable Comedy':fontcolor=cyan:fontsize=40:x=(w-text_w)/2:y=1600"
         ),
         "-c:v", "libx264", "-tune", "stillimage",
@@ -116,7 +112,7 @@ async def main():
     print("Synthesizing voices...")
     audio_files = await generate_audio(dialogues)
     
-    print("Rendering video with dynamic text and animations...")
+    print("Rendering video with dynamic text...")
     video_path = create_video(audio_files, dialogues)
     
     print("Uploading to YouTube...")
